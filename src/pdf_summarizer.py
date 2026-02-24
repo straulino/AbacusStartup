@@ -5,6 +5,7 @@ using the Abacus.AI platform's document processing and LLM capabilities.
 """
 
 import abacusai
+import json
 from typing import Optional, List, Dict, Any
 import os
 from pathlib import Path
@@ -143,9 +144,9 @@ class PDFSummarizer:
                      end_page: Optional[int] = None,
                      llm_name: Optional[str] = None) -> Dict[str, Any]:
         """Extract text from a PDF and generate a summary.
-        
+
         This is a convenience method that combines text extraction and summarization.
-        
+
         Args:
             pdf_path: Path to the PDF file
             pdf_bytes: PDF content as bytes
@@ -154,12 +155,14 @@ class PDFSummarizer:
             start_page: Optional starting page number
             end_page: Optional ending page number
             llm_name: Optional specific LLM model to use
-            
+
         Returns:
             Dictionary containing:
                 - 'text': Extracted text from PDF
                 - 'summary': Generated summary
                 - 'page_count': Number of pages processed
+                - 'text_length': Length of extracted text
+                - 'json_output': JSON string with document name and one-line summary
         """
         # Extract text from PDF
         extracted_text = self.extract_text_from_pdf(
@@ -168,7 +171,7 @@ class PDFSummarizer:
             start_page=start_page,
             end_page=end_page
         )
-        
+
         # Generate summary
         summary = self.summarize_text(
             text=extracted_text,
@@ -176,15 +179,34 @@ class PDFSummarizer:
             style=style,
             llm_name=llm_name
         )
-        
+
+        # Generate one-line summary
+        one_line_response = self.client.evaluate_prompt(
+            prompt=f"Summarize the following text in exactly one sentence:\n\n{extracted_text}",
+            llm_name=llm_name,
+            max_tokens=100,
+            temperature=0.3
+        )
+        one_line_summary = one_line_response.content if hasattr(one_line_response, 'content') else str(one_line_response)
+
+        # Extract document name
+        document_name = Path(pdf_path).name if pdf_path else "document.pdf"
+
         # Count pages (approximate based on text length)
         page_count = len(extracted_text.split('\n\n'))
-        
+
+        # Create JSON output with document name and one-line summary
+        json_output = json.dumps({
+            "document_name": document_name,
+            "one_line_summary": one_line_summary
+        }, indent=2)
+
         return {
             'text': extracted_text,
             'summary': summary,
             'page_count': page_count,
-            'text_length': len(extracted_text)
+            'text_length': len(extracted_text),
+            'json_output': json_output
         }
     
     def extract_key_information(self,
